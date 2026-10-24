@@ -64,8 +64,18 @@ public interface IGroupAccess
     Task Ensure(int groupId, CancellationToken ct);
 }
 
-public sealed class GroupAccess(IDb db, UserContext ctx, IMemoryCache cache) : IGroupAccess
+public sealed class GroupAccess(IDb db, UserContext ctx, IMemoryCache cache, IHostEnvironment env) : IGroupAccess
 {
+    private sealed class Diagnosis
+    {
+        public string? Server { get; set; }
+        public string? Database { get; set; }
+        public string? UserName { get; set; }
+        public int Relations { get; set; }
+        public int InGroup { get; set; }
+        public string? EnabledInGroup { get; set; }
+    }
+
     public async Task Ensure(int groupId, CancellationToken ct)
     {
         if (groupId <= 0) throw ApiException.BadRequest("Λείπει η υπηρεσία (GroupId).");
@@ -80,7 +90,26 @@ public sealed class GroupAccess(IDb db, UserContext ctx, IMemoryCache cache) : I
                 """, new { UserId = user.Id, GroupId = groupId }, ct) > 0;
             cache.Set(key, ok, TimeSpan.FromSeconds(60));
         }
-        if (!ok) throw ApiException.Forbidden();
+        if (!ok)
+        {
+            if (env.IsDevelopment())
+            {
+                // Which database the service reads and what it has for this user: helps when the
+                // connection string points to another installation than V1:BaseUrl.
+                var d = await db.First<Diagnosis>(
+                    """
+                    SELECT @@SERVERNAME AS Server, DB_NAME() AS [Database],
+                           (SELECT TOP 1 UserName FROM Organization.OrgUser WHERE IdOrgUser = @UserId) AS UserName,
+                           (SELECT COUNT(1) FROM Organization.UserRoleGroupRelationship WHERE IdOrgUser = @UserId) AS Relations,
+                           (SELECT COUNT(1) FROM Organization.UserRoleGroupRelationship WHERE IdOrgUser = @UserId AND IdOrgGroup = @GroupId) AS InGroup,
+                           (SELECT CONCAT('min ', ISNULL(CAST(MIN(CAST(Enabled AS int)) AS varchar(5)), 'NULL'), ', max ', ISNULL(CAST(MAX(CAST(Enabled AS int)) AS varchar(5)), 'NULL')) FROM Organization.UserRoleGroupRelationship WHERE IdOrgUser = @UserId AND IdOrgGroup = @GroupId) AS EnabledInGroup
+                    """, new { UserId = user.Id, GroupId = groupId }, ct);
+                throw ApiException.Forbidden(
+                    $"Δεν έχετε ρόλο σε αυτή την υπηρεσία. [v1: χρήστης {user.Id} «{user.UserName}», υπηρεσία {groupId}· " +
+                    $"βάση {d?.Server}/{d?.Database}: χρήστης «{d?.UserName ?? "δεν υπάρχει"}», σχέσεις {d?.Relations}, στην υπηρεσία {d?.InGroup} (Enabled: {d?.EnabledInGroup ?? "-"})]");
+            }
+            throw ApiException.Forbidden();
+        }
     }
 }
 
