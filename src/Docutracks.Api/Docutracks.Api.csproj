@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>docutracks-api-001c97121654</UserSecretsId>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Docutracks.Api</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    SQL Server client. Restored from nuget.org in a normal build (Visual Studio, dotnet publish).
+    `-p:Offline=true` builds without it (no access to nuget.org): SQL calls then fail at run time.
+  -->
+  <ItemGroup Condition="'$(Offline)' != 'true'">
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(Offline)' == 'true'">
+    <DefineConstants>$(DefineConstants);OFFLINE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Docutracks.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.Production.sample.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+</Project>

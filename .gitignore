@@ -1,0 +1,6 @@
+bin/
+obj/
+.offline-feed/
+*.user
+.vs/
+src/Docutracks.Api/appsettings.Production.json
