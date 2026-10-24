@@ -103,7 +103,7 @@ public sealed class IdentityMiddleware(RequestDelegate next)
 }
 
 /// <summary>Every failure becomes the envelope; unexpected ones are logged and get a generic message.</summary>
-public sealed class ErrorMiddleware(RequestDelegate next, ILogger<ErrorMiddleware> log)
+public sealed class ErrorMiddleware(RequestDelegate next, ILogger<ErrorMiddleware> log, IHostEnvironment env)
 {
     public async Task Invoke(HttpContext http)
     {
@@ -122,8 +122,20 @@ public sealed class ErrorMiddleware(RequestDelegate next, ILogger<ErrorMiddlewar
         catch (Exception e)
         {
             log.LogError(e, "Unhandled error on {Method} {Path}", http.Request.Method, http.Request.Path);
-            await Write(http, 200, "Παρουσιάστηκε σφάλμα. Δοκιμάστε ξανά ή ενημερώστε τον διαχειριστή.", "error");
+            var message = e is System.Data.Common.DbException || e.InnerException is System.Data.Common.DbException
+                ? "Δεν ήταν δυνατή η ανάγνωση από τη βάση του Docutracks."
+                : "Παρουσιάστηκε σφάλμα. Δοκιμάστε ξανά ή ενημερώστε τον διαχειριστή.";
+            // Development: the cause too, so a local run shows it without the console.
+            if (env.IsDevelopment()) message += " [" + Detail(e) + "]";
+            await Write(http, 200, message, "error");
         }
+    }
+
+    private static string Detail(Exception e)
+    {
+        var parts = new List<string>();
+        for (var x = e; x is not null && parts.Count < 4; x = x.InnerException) parts.Add($"{x.GetType().Name}: {x.Message}");
+        return string.Join(" → ", parts);
     }
 
     private static async Task Write(HttpContext http, int status, string message, string? code)
