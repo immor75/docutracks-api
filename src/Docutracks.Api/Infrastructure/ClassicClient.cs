@@ -12,7 +12,7 @@ namespace Docutracks.Api.Infrastructure;
 /// Docutracks code runs unchanged (DocumentModelBinder, IUiAction.ExecuteAction) and nothing is added
 /// to the solution. The price: it depends on the routes and on a few marks of the HTML responses.
 /// </summary>
-public sealed partial class ClassicClient(HttpClient http, UserContext user, IOptions<ApiOptions> options, IMemoryCache cache, ILogger<ClassicClient> log)
+public sealed partial class ClassicClient(HttpClient http, UserContext user, IOptions<ApiOptions> options, IMemoryCache cache, ILogger<ClassicClient> log, IHostEnvironment env)
 {
     public const string HttpClientName = V1Client.HttpClientName;
 
@@ -50,12 +50,12 @@ public sealed partial class ClassicClient(HttpClient http, UserContext user, IOp
                 log.LogInformation("Anti-forgery token refused for {Path}; taking a new one", path);
                 continue;
             }
-            if (!res.IsSuccessStatusCode)
-            {
-                log.LogWarning("Classic POST {Path}: {Status}", path, (int)res.StatusCode);
-                return new PostResult(false, null, ErrorMessage(html) ?? $"Το Docutracks απάντησε με σφάλμα ({(int)res.StatusCode}).", html);
-            }
-            return new PostResult(false, null, ErrorMessage(html), html);
+            var message = ErrorMessage(html) ?? (res.IsSuccessStatusCode ? null : $"Το Docutracks απάντησε με σφάλμα ({(int)res.StatusCode}).");
+            var saved = Keep(path, (int)res.StatusCode, location, html);
+            log.LogWarning("Classic POST {Path} not done: {Status} {Message}; page in {File}", path, (int)res.StatusCode, message, saved);
+            if (env.IsDevelopment())
+                message = (message ?? "Το Docutracks δεν ολοκλήρωσε την αποθήκευση.") + $" [HTTP {(int)res.StatusCode}, σελίδα: {saved}]";
+            return new PostResult(false, null, message, html);
         }
     }
 
@@ -74,8 +74,10 @@ public sealed partial class ClassicClient(HttpClient http, UserContext user, IOp
             if (tokenPage is not null && IsAntiForgeryFailure(res, text) && attempt == 0) continue;
             if (!res.IsSuccessStatusCode)
             {
-                log.LogWarning("Classic POST {Path}: {Status}", path, (int)res.StatusCode);
-                throw new ApiException(ErrorMessage(text) ?? $"Το Docutracks απάντησε με σφάλμα ({(int)res.StatusCode}).");
+                var saved = Keep(path, (int)res.StatusCode, null, text);
+                log.LogWarning("Classic POST {Path}: {Status}; page in {File}", path, (int)res.StatusCode, saved);
+                var message = ErrorMessage(text) ?? $"Το Docutracks απάντησε με σφάλμα ({(int)res.StatusCode}).";
+                throw new ApiException(env.IsDevelopment() ? message + $" [σελίδα: {saved}]" : message);
             }
             return text;
         }
@@ -91,6 +93,25 @@ public sealed partial class ClassicClient(HttpClient http, UserContext user, IOp
         catch (System.Text.Json.JsonException)
         {
             throw new ApiException("Το Docutracks δεν απάντησε όπως αναμενόταν.");
+        }
+    }
+
+    /// <summary>The page of a post that did not succeed, for the log (Files:TempPath/classic, last 50).</summary>
+    private string? Keep(string path, int status, string? location, string html)
+    {
+        try
+        {
+            var folder = Path.Combine(string.IsNullOrWhiteSpace(opt.Files.TempPath) ? Path.Combine(Path.GetTempPath(), "docutracks-api") : opt.Files.TempPath, "classic");
+            Directory.CreateDirectory(folder);
+            foreach (var old in new DirectoryInfo(folder).GetFiles("*.html").OrderByDescending(f => f.LastWriteTimeUtc).Skip(49)) old.Delete();
+            var file = Path.Combine(folder, $"{DateTime.Now:yyyyMMdd-HHmmss-fff}.html");
+            File.WriteAllText(file, $"<!-- POST {path} → {status} {location} -->\n{html}");
+            return file;
+        }
+        catch (Exception e)
+        {
+            log.LogDebug(e, "Could not keep the page");
+            return null;
         }
     }
 

@@ -6,6 +6,12 @@ using Docutracks.Api.Folders;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<ApiOptions>(builder.Configuration);
+// A relative Files:TempPath is relative to the project (content root), e.g. "../../.temp" in Development.
+builder.Services.PostConfigure<ApiOptions>(o =>
+{
+    if (!string.IsNullOrWhiteSpace(o.Files.TempPath) && !Path.IsPathRooted(o.Files.TempPath))
+        o.Files.TempPath = Path.GetFullPath(o.Files.TempPath, builder.Environment.ContentRootPath);
+});
 builder.Services.ConfigureHttpJsonOptions(o => Json.Configure(o.SerializerOptions));
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient(V1Client.HttpClientName, (sp, http) =>
@@ -44,7 +50,8 @@ builder.Services.AddScoped(sp => new ClassicClient(
     sp.GetRequiredService<UserContext>(),
     sp.GetRequiredService<IOptions<ApiOptions>>(),
     sp.GetRequiredService<IMemoryCache>(),
-    sp.GetRequiredService<ILogger<ClassicClient>>()));
+    sp.GetRequiredService<ILogger<ClassicClient>>(),
+    sp.GetRequiredService<IHostEnvironment>()));
 builder.Services.AddDocuments();
 builder.Services.AddFolders();
 

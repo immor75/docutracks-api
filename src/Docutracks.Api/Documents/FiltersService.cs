@@ -34,7 +34,7 @@ public sealed class FiltersService(IReference reference, ISettings settings, IDb
             e.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
             var sub = await db.Scalar<int>("SELECT COUNT(1) FROM Organization.OrgGroup WHERE IdParentOrgGroup = @groupId AND IsActive = 1", new { groupId }, ct);
             var consultants = await db.Scalar<int>(
-                "SELECT COUNT(1) FROM Organization.UserRoleGroupRelationship WHERE IdOrgGroup = @groupId AND IdOrgRole = @role AND Enabled = 1",
+                "SELECT COUNT(1) FROM Organization.UserRoleGroupRelationship ur WHERE ur.IdOrgGroup = @groupId AND ur.IdOrgRole = @role AND EXISTS (SELECT 1 FROM Organization.OrgRole r WHERE r.IdOrgRole = ur.IdOrgRole AND r.IsAssignable = 1)",
                 new { groupId, role = Roles.Consultor }, ct);
             return (HasSubGroups: sub > 0, HasConsultant: consultants > 0);
         });

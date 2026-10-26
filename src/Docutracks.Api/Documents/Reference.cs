@@ -105,7 +105,7 @@ public sealed class Reference(IDb db, IMemoryCache cache, IOptions<ApiOptions> o
                 "SELECT IdOrgGroup, Name, IdOrgGroupKind, IdParentOrgGroup, IsActiveOldProtokollo, IdActiveManager FROM Organization.OrgGroup WHERE IdOrgGroup = @groupId",
                 new { groupId }, ct) ?? throw ApiException.Forbidden("Η υπηρεσία δεν βρέθηκε.");
             var roles = (await db.Query<RoleRow>(
-                "SELECT IdOrgRole FROM Organization.UserRoleGroupRelationship WHERE IdOrgUser = @userId AND IdOrgGroup = @groupId AND Enabled = 1",
+                "SELECT ur.IdOrgRole FROM Organization.UserRoleGroupRelationship ur WHERE ur.IdOrgUser = @userId AND ur.IdOrgGroup = @groupId AND EXISTS (SELECT 1 FROM Organization.OrgRole r WHERE r.IdOrgRole = ur.IdOrgRole AND r.IsAssignable = 1)",
                 new { userId, groupId }, ct)).Select(r => r.IdOrgRole).ToHashSet();
             var isAdmin = await db.Scalar<bool?>("SELECT IsAdministrator FROM Organization.OrgUser WHERE IdOrgUser = @userId", new { userId }, ct) ?? false;
             return new GroupRole

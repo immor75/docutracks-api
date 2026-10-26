@@ -325,7 +325,7 @@ public sealed class ViewService(IDb db, IReference reference, V1Mobile mobile, V
                    CASE WHEN EXISTS (
                         SELECT 1 FROM Document.DocumentCopy c
                          INNER JOIN Organization.UserRoleGroupRelationship ur ON ur.IdOrgGroup IN (c.IdOwnedByGroup, c.IdCreatedByGroup)
-                         WHERE c.IdDocument = d.IdDocument AND ur.IdOrgUser = @userId AND ur.Enabled = 1) THEN 1 ELSE 0 END AS CanOpen
+                         WHERE c.IdDocument = d.IdDocument AND ur.IdOrgUser = @userId AND EXISTS (SELECT 1 FROM Organization.OrgRole r WHERE r.IdOrgRole = ur.IdOrgRole AND r.IsAssignable = 1)) THEN 1 ELSE 0 END AS CanOpen
               FROM (SELECT IdDocumentSxetiko AS Id, IdRelationType, 0 AS Inverse FROM Document.DocumentDocument WHERE IdDocument = @id
                     UNION SELECT IdDocument AS Id, IdRelationType, 1 AS Inverse FROM Document.DocumentDocument WHERE IdDocumentSxetiko = @id) r
               INNER JOIN Document.Document d ON d.IdDocument = r.Id AND d.IsDeleted = 0
